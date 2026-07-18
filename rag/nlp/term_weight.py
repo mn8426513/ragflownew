@@ -112,6 +112,9 @@ class Dealer:
             return res
 
         fnm = os.path.join(get_project_base_directory(), "rag/res")
+        logging.info(f"分词权重{os.path.join(get_project_base_directory(), "rag/res")}")
+        logging.info(f"分词权重{os.path.join(get_project_base_directory(), "rag/res")}")
+        logging.info(f"ner.json路径 {os.path.join(fnm, "ner.json")}")
         self.ne, self.df = {}, {}
         try:
             with open(os.path.join(fnm, "ner.json"), "r", encoding="utf-8") as f:

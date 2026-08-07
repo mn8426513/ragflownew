@@ -218,7 +218,11 @@ def add_provider(tenant_id: str, provider_name: str):
     if existing:
         return False, f"Provider {provider_name} already exists"
 
-    TenantModelProviderService.insert(tenant_id=tenant_id, provider_name=provider_name)
+    TenantModelProviderService.insert(
+        tenant_id=tenant_id,
+        provider_name=provider_name,
+        create_user_id=tenant_id
+    )
     return True, "success"
 
 def add_provider_for_invite_user(tenant_id: str, provider_name: str):

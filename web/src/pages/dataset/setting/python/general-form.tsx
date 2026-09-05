@@ -1,4 +1,3 @@
-import EnterpriseAccessControl from '@/components/enterprise-access-control';
 import { AvatarUpload } from '@/components/avatar-upload';
 import { SelectWithSearch } from '@/components/originui/select-with-search';
 import PageRankFormField from '@/components/page-rank-form-field';
@@ -130,9 +129,6 @@ export function GeneralForm() {
         }}
       />
       <PermissionFormField></PermissionFormField>
-      <EnterpriseAccessControl
-        datasetId={useKnowledgeBaseContext().knowledgeBase?.id}
-      ></EnterpriseAccessControl>
       <EmbeddingModelItem
         isEdit={true}
         ownerTenantId={ownerTenantId}

@@ -1,0 +1,261 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: develop
+nodes_managed: true
+exported_at: "2026-09-05T13:31:29Z"
+modules:
+    "":
+        dir_name: RAGFlow 全栈检索增强生成平台
+        title: RAGFlow 全栈检索增强生成平台
+        scope:
+            - README.md
+            - AGENTS.md
+            - PROJECT_STRUCTURE.md
+            - SECURITY.md
+            - pyproject.toml
+            - go.mod
+            - go.sum
+            - uv.lock
+            - Dockerfile*
+            - .gitignore
+            - build.sh
+            - run_tests.py
+            - show_env.sh
+            - .dockerignore
+            - .gitattributes
+            - .rooignore
+            - .trivyignore
+            - CLAUDE.md
+            - Dockerfile
+            - Dockerfile.scratch.oc9
+            - Dockerfile_base
+            - Dockerfile_ci
+            - Dockerfile_deepdoc_oss
+            - Dockerfile_go
+            - Dockerfile_tei
+            - LICENSE
+            - README_MY.md
+            - README_ar.md
+            - README_fr.md
+            - README_id.md
+            - README_ja.md
+            - README_ko.md
+            - README_pt_br.md
+            - README_ru.md
+            - README_tr.md
+            - README_tzh.md
+            - README_zh.md
+            - codecov.yml
+            - deepdoc_go_alignment_report.md
+            - lefthook.yml
+            - run_go_tests.sh
+            - test.py
+        source_files: []
+        children:
+            - admin_service
+            - agent_framework
+            - common_libs
+            - configuration
+            - deepdoc
+            - deployment
+            - documentation
+            - examples
+            - frontend_web
+            - go_backend
+            - mcp
+            - python_api
+            - rag_core
+            - sdk_python
+            - tests
+            - tools_scripts
+        depends_on: []
+        related_to: []
+    admin_service:
+        dir_name: RAGFlow 管理员服务与 CLI
+        title: RAGFlow 管理员服务与 CLI
+        scope:
+            - admin/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: python_api
+    agent_framework:
+        dir_name: Agent 工作流框架（画布、组件、工具与沙箱）
+        title: Agent 工作流框架（画布、组件、工具与沙箱）
+        scope:
+            - agent/
+        source_files: []
+        children:
+            - agent_framework/core_runtime
+        depends_on: []
+        related_to: []
+    agent_framework/core_runtime:
+        dir_name: Agent 画布运行时与 DSL 迁移
+        title: Agent 画布运行时与 DSL 迁移
+        scope:
+            - agent/canvas.py
+            - agent/dsl_migration.py
+            - agent/settings.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: python_api
+    common_libs:
+        dir_name: 通用数据源连接器与记忆存储库
+        title: 通用数据源连接器与记忆存储库
+        scope:
+            - common/
+            - memory/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    configuration:
+        dir_name: RAGFlow 服务配置与模型元数据
+        title: RAGFlow 服务配置与模型元数据
+        scope:
+            - conf/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: deployment
+    deepdoc:
+        dir_name: DeepDoc 文档解析与视觉识别服务
+        title: DeepDoc 文档解析与视觉识别服务
+        scope:
+            - deepdoc/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    deployment:
+        dir_name: RAGFlow 部署编排（Docker Compose & Helm）
+        title: RAGFlow 部署编排（Docker Compose & Helm）
+        scope:
+            - docker/
+            - helm/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: configuration
+    documentation:
+        dir_name: RAGFlow 文档站点（Docusaurus）
+        title: RAGFlow 文档站点（Docusaurus）
+        scope:
+            - docs/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    examples:
+        dir_name: RAGFlow 使用示例集（SDK_HTTP_前端）
+        title: RAGFlow 使用示例集（SDK/HTTP/前端）
+        scope:
+            - example/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: python_api
+            - path: sdk_python
+    frontend_web:
+        dir_name: RAGFlow Web 前端工程
+        title: RAGFlow Web 前端工程
+        scope:
+            - web/
+        source_files: []
+        children:
+            - frontend_web/app_shell_and_layouts
+        depends_on: []
+        related_to: []
+    frontend_web/app_shell_and_layouts:
+        dir_name: 应用启动壳与路由布局
+        title: 应用启动壳与路由布局
+        scope:
+            - web/src/main.tsx
+            - web/src/app.tsx
+            - web/src/routes.tsx
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    go_backend:
+        dir_name: RAGFlow Go 后端服务（API_管理_采集_同步多进程入口）
+        title: RAGFlow Go 后端服务（API/管理/采集/同步多进程入口）
+        scope:
+            - internal/
+            - cmd/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    mcp:
+        dir_name: RAGFlow MCP 客户端与服务端
+        title: RAGFlow MCP 客户端与服务端
+        scope:
+            - mcp/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: python_api
+    python_api:
+        dir_name: RAGFlow API 服务层（Quart HTTP 服务器与业务路由）
+        title: RAGFlow API 服务层（Quart HTTP 服务器与业务路由）
+        scope:
+            - api/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: admin_service
+            - path: agent_framework/core_runtime
+            - path: examples
+            - path: mcp
+            - path: tests
+    rag_core:
+        dir_name: RAGFlow 核心检索与文档处理引擎
+        title: RAGFlow 核心检索与文档处理引擎
+        scope:
+            - rag/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
+    sdk_python:
+        dir_name: RAGFlow Python SDK
+        title: RAGFlow Python SDK
+        scope:
+            - sdk/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: examples
+            - path: tests
+    tests:
+        dir_name: RAGFlow 测试套件（单元测试、集成_HTTP API、Playwright E2E、基准与基准报告）
+        title: RAGFlow 测试套件（单元测试、集成/HTTP API、Playwright E2E、基准与基准报告）
+        scope:
+            - test/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to:
+            - path: python_api
+            - path: sdk_python
+    tools_scripts:
+        dir_name: RAGFlow 辅助工具与脚本集
+        title: RAGFlow 辅助工具与脚本集
+        scope:
+            - tools/
+            - scripts/
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

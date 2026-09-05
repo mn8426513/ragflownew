@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: go_backend
+title: RAGFlow Go 后端服务（API/管理/采集/同步多进程入口）
+scope:
+    - internal/
+    - cmd/
+source_files: []
+depends_on: []
+related_to: []

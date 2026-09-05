@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: examples
+title: RAGFlow 使用示例集（SDK/HTTP/前端）
+scope:
+    - example/
+source_files: []
+depends_on: []
+related_to:
+    - path: python_api
+    - path: sdk_python

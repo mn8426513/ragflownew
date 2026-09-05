@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: frontend_web/app_shell_and_layouts
+title: 应用启动壳与路由布局
+scope:
+    - web/src/main.tsx
+    - web/src/app.tsx
+    - web/src/routes.tsx
+source_files: []
+depends_on: []
+related_to: []

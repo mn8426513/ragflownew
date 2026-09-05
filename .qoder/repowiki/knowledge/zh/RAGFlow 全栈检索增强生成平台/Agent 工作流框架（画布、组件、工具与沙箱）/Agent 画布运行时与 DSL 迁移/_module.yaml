@@ -1,0 +1,11 @@
+schema_version: 1
+module_path: agent_framework/core_runtime
+title: Agent 画布运行时与 DSL 迁移
+scope:
+    - agent/canvas.py
+    - agent/dsl_migration.py
+    - agent/settings.py
+source_files: []
+depends_on: []
+related_to:
+    - path: python_api

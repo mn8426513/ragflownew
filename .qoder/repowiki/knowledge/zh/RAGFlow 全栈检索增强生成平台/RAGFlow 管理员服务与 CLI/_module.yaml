@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: admin_service
+title: RAGFlow 管理员服务与 CLI
+scope:
+    - admin/
+source_files: []
+depends_on: []
+related_to:
+    - path: python_api

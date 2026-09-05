@@ -1,0 +1,9 @@
+schema_version: 1
+module_path: mcp
+title: RAGFlow MCP 客户端与服务端
+scope:
+    - mcp/
+source_files: []
+depends_on: []
+related_to:
+    - path: python_api

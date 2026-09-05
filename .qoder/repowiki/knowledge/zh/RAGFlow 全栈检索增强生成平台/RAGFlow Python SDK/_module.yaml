@@ -1,0 +1,10 @@
+schema_version: 1
+module_path: sdk_python
+title: RAGFlow Python SDK
+scope:
+    - sdk/
+source_files: []
+depends_on: []
+related_to:
+    - path: examples
+    - path: tests

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: rag_core
+title: RAGFlow 核心检索与文档处理引擎
+scope:
+    - rag/
+source_files: []
+depends_on: []
+related_to: []

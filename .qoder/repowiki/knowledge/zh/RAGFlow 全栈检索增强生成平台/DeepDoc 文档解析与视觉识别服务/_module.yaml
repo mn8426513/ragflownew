@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: deepdoc
+title: DeepDoc 文档解析与视觉识别服务
+scope:
+    - deepdoc/
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: agent_framework
+title: Agent 工作流框架（画布、组件、工具与沙箱）
+scope:
+    - agent/
+source_files: []
+depends_on: []
+related_to: []

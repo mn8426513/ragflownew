@@ -1,0 +1,8 @@
+schema_version: 1
+module_path: frontend_web
+title: RAGFlow Web 前端工程
+scope:
+    - web/
+source_files: []
+depends_on: []
+related_to: []

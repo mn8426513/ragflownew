@@ -1,0 +1,49 @@
+schema_version: 1
+module_path: ""
+title: RAGFlow 全栈检索增强生成平台
+scope:
+    - README.md
+    - AGENTS.md
+    - PROJECT_STRUCTURE.md
+    - SECURITY.md
+    - pyproject.toml
+    - go.mod
+    - go.sum
+    - uv.lock
+    - Dockerfile*
+    - .gitignore
+    - build.sh
+    - run_tests.py
+    - show_env.sh
+    - .dockerignore
+    - .gitattributes
+    - .rooignore
+    - .trivyignore
+    - CLAUDE.md
+    - Dockerfile
+    - Dockerfile.scratch.oc9
+    - Dockerfile_base
+    - Dockerfile_ci
+    - Dockerfile_deepdoc_oss
+    - Dockerfile_go
+    - Dockerfile_tei
+    - LICENSE
+    - README_MY.md
+    - README_ar.md
+    - README_fr.md
+    - README_id.md
+    - README_ja.md
+    - README_ko.md
+    - README_pt_br.md
+    - README_ru.md
+    - README_tr.md
+    - README_tzh.md
+    - README_zh.md
+    - codecov.yml
+    - deepdoc_go_alignment_report.md
+    - lefthook.yml
+    - run_go_tests.sh
+    - test.py
+source_files: []
+depends_on: []
+related_to: []

@@ -1,0 +1,13 @@
+schema_version: 1
+module_path: python_api
+title: RAGFlow API 服务层（Quart HTTP 服务器与业务路由）
+scope:
+    - api/
+source_files: []
+depends_on: []
+related_to:
+    - path: admin_service
+    - path: agent_framework/core_runtime
+    - path: examples
+    - path: mcp
+    - path: tests

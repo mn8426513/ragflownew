@@ -47,7 +47,7 @@ mysql:
 minio:
   user: 'rag_flow'
   password: 'ragflow@123'
-  host: 'minio:9000'
+  host: 'minio:9010'
   bucket: ''
   prefix_path: ''
 es:

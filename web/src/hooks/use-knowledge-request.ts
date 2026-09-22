@@ -47,6 +47,7 @@ import {
 } from '@/interfaces/request/knowledge';
 import i18n from '@/locales/config';
 import kbService, {
+  checkEmbedding,
   clearWiki,
   deleteArtifactsStructure,
   deleteKnowledgeGraph,
@@ -88,8 +89,8 @@ import {
   useHandleSearchChange,
 } from './logic-hooks';
 import {
-  extractParserConfigExt,
   isPipelineParserConfig,
+  normalizeParserConfig,
 } from './parser-config-utils';
 import { useSetPaginationParams } from './route-hook';
 import { DatasetGenerateKeys } from './use-dataset-generate';
@@ -119,12 +120,29 @@ export const enum KnowledgeApiAction {
   DeleteDatasetStructure = 'deleteDatasetStructure',
   FetchArtifactAlteration = 'fetchArtifactAlteration',
   RunArtifactIndex = 'runArtifactIndex',
+  CheckKbEmbedding = 'checkKbEmbedding',
 }
 
 export const useKnowledgeBaseId = (): string => {
   const { id } = useParams();
 
   return (id as string) || '';
+};
+
+export const useCheckKbEmbedding = () => {
+  const knowledgeBaseId = useKnowledgeBaseId();
+
+  const { mutateAsync, isPending } = useMutation({
+    mutationKey: [KnowledgeApiAction.CheckKbEmbedding],
+    mutationFn: async (embedId: string) => {
+      const { data } = await checkEmbedding(knowledgeBaseId || '', {
+        embd_id: embedId,
+      });
+      return data;
+    },
+  });
+
+  return { checkKbEmbedding: mutateAsync, checking: isPending };
 };
 
 export const useTestRetrieval = () => {
@@ -137,7 +155,7 @@ export const useTestRetrieval = () => {
       ...values,
       kb_id: values?.kb_id || knowledgeBaseId,
       page: 1,
-      doc_ids: filterValue.doc_ids,
+      document_ids: filterValue.doc_ids,
       highlight: true,
       include_knowledge_compilation: false,
     };
@@ -164,7 +182,7 @@ export const useTestRetrieval = () => {
       if (mutation.data && queryParams.question) {
         const newParams = {
           ...queryParams,
-          doc_ids: value.doc_ids ?? [],
+          document_ids: value.doc_ids ?? [],
           page: 1,
         };
         mutation.mutate(newParams);
@@ -218,10 +236,8 @@ export const useFetchNextKnowledgeListByPage = () => {
       const { data } = await listDataset({
         page_size: pagination.pageSize,
         page: pagination.current,
-        ext: {
-          keywords: debouncedSearchString,
-          owner_ids: filterValue.owner as string[],
-        },
+        keywords: debouncedSearchString,
+        owner_ids: filterValue.owner as string[],
       });
 
       return { kbs: data?.data, total_datasets: data?.total_datasets };
@@ -283,10 +299,8 @@ export const useCreateKnowledge = () => {
       chunk_method?: string;
       parseType?: ParseType;
       pipeline_id?: string | null;
-      ext?: {
-        language?: string;
-        [key: string]: any;
-      };
+      language?: string;
+      [key: string]: any;
     }) => {
       const { data = {} } = await kbService.createKb(params);
       if (data.code === 0) {
@@ -364,7 +378,7 @@ export const useUpdateKnowledge = (shouldFetchList = false) => {
         permission,
         pagerank,
         parser_config,
-        ...ext
+        ...additionalFields
       } = params;
       const requestBody: Record<string, any> = {
         name,
@@ -377,8 +391,8 @@ export const useUpdateKnowledge = (shouldFetchList = false) => {
         pagerank,
         parser_config: isPipelineParserConfig(parser_config)
           ? parser_config
-          : extractParserConfigExt(parser_config),
-        ...omit(ext, ['kb_id']),
+          : normalizeParserConfig(parser_config),
+        ...omit(additionalFields, ['kb_id']),
       };
 
       const { data = {} } = await updateKb(kbId, requestBody);
@@ -1036,21 +1050,29 @@ export const KnowledgeListKeys = {
     shouldFilterListWithoutDocument: boolean,
     keywords: string,
     pageSize: number,
+    ownerTenantId?: string,
   ) =>
     [
       KnowledgeApiAction.FetchKnowledgeList,
       shouldFilterListWithoutDocument,
       keywords,
       pageSize,
+      ownerTenantId,
     ] as const,
-  byIds: (ids: string[]) =>
-    [KnowledgeApiAction.FetchKnowledgeList, 'byIds', ids] as const,
+  byIds: (ids: string[], ownerTenantId?: string) =>
+    [
+      KnowledgeApiAction.FetchKnowledgeList,
+      'byIds',
+      ids,
+      ownerTenantId,
+    ] as const,
 };
 
 export const useFetchKnowledgeList = (
   shouldFilterListWithoutDocument: boolean = false,
   keywords = '',
   pageSize: number = KNOWLEDGE_LIST_PAGE_SIZE,
+  ownerTenantId?: string,
 ): {
   list: IDataset[];
   loading: boolean;
@@ -1065,6 +1087,7 @@ export const useFetchKnowledgeList = (
         shouldFilterListWithoutDocument,
         keywords,
         pageSize,
+        // ownerTenantId,
       ),
       gcTime: 0,
       initialPageParam: 1,
@@ -1073,7 +1096,9 @@ export const useFetchKnowledgeList = (
         const { data } = await listDataset({
           page,
           page_size: pageSize,
-          ...(keywords ? { ext: { keywords } } : {}),
+          ...(keywords ? { keywords } : {}),
+          // Viewing a shared canvas: list the canvas owner's datasets.
+          // ...(ownerTenantId ? { tenant_id: ownerTenantId } : {}),
         });
         return {
           items: (data?.data ?? []) as IDataset[],
@@ -1130,7 +1155,10 @@ export const useFetchKnowledgeList = (
  * users pick variables alongside datasets); those are not resolvable ids and
  * are dropped before the request is built.
  */
-export const useFetchDatasetsByIds = (ids: string[]) => {
+export const useFetchDatasetsByIds = (
+  ids: string[],
+  ownerTenantId?: string,
+) => {
   const sortedIds = useMemo(() => ids.filter(isDatasetId).sort(), [ids]);
   const { data, isFetching: loading } = useQuery<IDataset[]>({
     queryKey: KnowledgeListKeys.byIds(sortedIds),
@@ -1155,7 +1183,10 @@ export const useFetchDatasetsByIds = (ids: string[]) => {
  * empty while the lookup is in flight so consumers can hold off validation
  * until it settles; `settled` flips true once the lookup has finished.
  */
-export const useStaleDatasetIds = (datasetIds?: string[]) => {
+export const useStaleDatasetIds = (
+  datasetIds?: string[],
+  ownerTenantId?: string,
+) => {
   // Variable references (e.g. `sys.query`) never resolve to datasets, so
   // exclude them up front instead of letting them fall out of the lookup
   // below and get misreported as stale.
@@ -1163,7 +1194,10 @@ export const useStaleDatasetIds = (datasetIds?: string[]) => {
     () => (datasetIds ?? []).filter(isDatasetId),
     [datasetIds],
   );
-  const { data: datasets, loading } = useFetchDatasetsByIds(persistedIds);
+  const { data: datasets, loading } = useFetchDatasetsByIds(
+    persistedIds,
+    ownerTenantId,
+  );
 
   const staleDatasetIds = useMemo(() => {
     if (loading) {
@@ -1299,7 +1333,7 @@ export const useTestChunkRetrieval = (): ResponsePostType<ITestingResult> & {
         ...values,
         kb_id: values.kb_id ?? knowledgeBaseId,
         page,
-        size: pageSize,
+        page_size: pageSize,
       });
       if (data.code === 0) {
         const res = data.data;
@@ -1342,9 +1376,9 @@ export const useTestChunkAllRetrieval = (): ResponsePostType<ITestingResult> & {
       const { data } = await kbService.retrievalTest({
         ...values,
         kb_id: values.kb_id ?? knowledgeBaseId,
-        doc_ids: [],
+        document_ids: [],
         page,
-        size: pageSize,
+        page_size: pageSize,
       });
       if (data.code === 0) {
         const res = data.data;

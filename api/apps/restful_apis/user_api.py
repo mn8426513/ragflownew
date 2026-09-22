@@ -240,6 +240,9 @@ async def oauth_callback(channel):
         if not users:
             if not WhitelistService.is_registration_allowed(user_info.email):
                 return redirect("/?error=email_not_in_whitelist")
+            if not getattr(settings, "OAUTH_AUTO_REGISTER", True):
+                logging.warning("OAuth/OIDC JIT registration blocked: email=%s, channel=%s", user_info.email, channel)
+                return redirect("/?error=registration_disabled")
             try:
                 try:
                     avatar = await download_img(user_info.avatar_url)

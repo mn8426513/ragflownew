@@ -418,6 +418,10 @@ func (s *ChatPipelineService) AsyncChat(
 		if promptConfigQuote, ok := promptConfig["quote"].(bool); ok {
 			quote = quote && promptConfigQuote
 		}
+		// The dialog's configured no-answer line ("空回复"). An answer that only
+		// reports it is decorated as if quoting were off, so it carries neither
+		// citation markers nor a document reference (decorateQuote).
+		emptyResponse, _ := promptConfig["empty_response"].(string)
 		fieldMap, fmErr := s.kbDAO.GetFieldMap(ctx, dao.DB, kbIDStrings(kbs))
 		if fmErr != nil {
 			common.Warn("get_field_map failed; proceeding without field_map", zap.Error(fmErr))
@@ -646,7 +650,7 @@ func (s *ChatPipelineService) AsyncChat(
 		if useKW, _ := chat.PromptConfig["keyword"].(bool); useKW && chatModel != nil && len(questions) > 0 {
 			if kw, err := KeywordExtraction(ctx, chatModel, questions[len(questions)-1], 3); err == nil && kw != "" {
 				original := questions[len(questions)-1]
-				questions[len(questions)-1] = questions[len(questions)-1] + "," + kw
+				questions[len(questions)-1] = AppendKeywords(original, kw)
 				common.Debug("keyword extraction applied",
 					zap.String("original_question", original),
 					zap.String("augmented_question", questions[len(questions)-1]))
@@ -858,7 +862,7 @@ func (s *ChatPipelineService) AsyncChat(
 					if harnessAnswer != "" {
 						common.Info("harness produced final cited answer; short-circuiting",
 							zap.Int("answer_chars", len(harnessAnswer)))
-						final := s.decorateHarnessAnswer(harnessAnswer, kbinfos, slotCites, citeChunkIDs, quote)
+						final := s.decorateHarnessAnswer(harnessAnswer, kbinfos, slotCites, citeChunkIDs, decorateQuote(quote, harnessAnswer, emptyResponse))
 						final.Final = true
 						out <- final
 						return
@@ -928,7 +932,11 @@ func (s *ChatPipelineService) AsyncChat(
 					}
 					if err != nil {
 						common.Warn("Retrieval failed", zap.Error(err))
-						// Continue with empty kbinfos.
+						out <- AsyncChatResult{
+							Answer: fmt.Sprintf("**ERROR**: %s", err.Error()),
+							Final:  true,
+						}
+						return
 					}
 				}
 
@@ -1474,7 +1482,7 @@ func (s *ChatPipelineService) AsyncChat(
 			visibleAnswer := s.extractVisibleAnswer(thinkState.fullText)
 
 			// Pass nil for ttsModel — audio was already produced per-delta.
-			final := s.decorateAnswer(ctx, visibleAnswer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, nil, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
+			final := s.decorateAnswer(ctx, visibleAnswer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, decorateQuote(quote, visibleAnswer, emptyResponse), nil, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
 			final.Final = true
 			final.AudioBinary = nil
 			timer.Exit(common.PhaseGenerateAnswer)
@@ -1515,7 +1523,7 @@ func (s *ChatPipelineService) AsyncChat(
 			common.Debug("User: " + userContent + "|Assistant: " + answer)
 
 			// Synthesize TTS for the full answer (non-stream, one-shot).
-			final := s.decorateAnswer(ctx, answer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, quote, ttsModel, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
+			final := s.decorateAnswer(ctx, answer, kbinfos, prompt, questions, usedTokenCount, timer, embModel, chat.VectorSimilarityWeight, decorateQuote(quote, answer, emptyResponse), ttsModel, langfuseTraceID, llmModelConfig, chat.TenantID, kbTenantIDStrings(kbs), len(knowledges) > 0)
 			final.Final = true
 			timer.Exit(common.PhaseGenerateAnswer)
 			out <- final
@@ -1638,7 +1646,12 @@ func (s *ChatPipelineService) AsyncChatSolo(
 		}
 
 		// 4. Build the chat model wrapper.
-		target, err := s.ModelProviderSvc.ResolveChatModelTarget(ctx, chat.TenantID, chat.LLMID)
+		var target *ModelTarget
+		if strings.TrimSpace(chat.LLMID) == "" {
+			target, err = s.ModelProviderSvc.modelSolver().ResolveDefaultModelConfig(ctx, chat.TenantID, entity.ModelTypeChat)
+		} else {
+			target, err = s.ModelProviderSvc.modelSolver().ResolveModelConfig(ctx, chat.TenantID, entity.ModelTypeChat, chat.LLMID)
+		}
 		if err != nil {
 			out <- AsyncChatResult{
 				Answer: fmt.Sprintf("**ERROR**: %s", err.Error()),
@@ -1649,7 +1662,7 @@ func (s *ChatPipelineService) AsyncChatSolo(
 		chatModel := modelModule.NewChatModel(target.Driver, &target.ModelName, target.APIConfig)
 
 		// 5. Resolve TTS model. Best-effort: warn and proceed without TTS on lookup failure.
-		var ttsModel *modelModule.ChatModel
+		var ttsModel *modelModule.TTSModel
 		if promptConfig != nil {
 			if useTTS, _ := promptConfig["tts"].(bool); useTTS {
 				target, ttsErr := s.ModelProviderSvc.modelSolver().ResolveDefaultModelConfig(ctx, chat.TenantID, entity.ModelTypeTTS)
@@ -1658,7 +1671,7 @@ func (s *ChatPipelineService) AsyncChatSolo(
 						zap.String("tenant_id", chat.TenantID),
 						zap.Error(ttsErr))
 				} else {
-					ttsModel = modelModule.NewChatModel(target.Driver, &target.ModelName, target.APIConfig)
+					ttsModel = modelModule.NewTTSModel(target.Driver, &target.ModelName, target.APIConfig)
 				}
 			}
 		}
@@ -2130,12 +2143,13 @@ func tokenizeText(text string) string {
 }
 
 // getLLMModelConfig resolves the LLM model configuration for the chat.
-// Mirrors Python's three-branch resolver at dialog_service.py:552-561,
-// extended so the tenant-default branch also probes vision capability:
+// Mirrors Python's three-branch resolver at dialog_service.py:552-561. Chat
+// model resolution always requires the enrolled Chat type; vision capability
+// is determined separately for attachment dispatch:
 //
 //	if chat.llm_id:
-//	    if "image2text" in get_model_type_by_name(...): → IMAGE2TEXT
-//	    else:                                            → CHAT
+//	    if "chat" and "image2text" in get_model_type_by_name(...): → IMAGE2TEXT
+//	    else:                                                       → CHAT
 //	else:                                                → tenant default
 //	    (IMAGE2TEXT when the default model is vision-capable, else CHAT)
 //
@@ -2166,15 +2180,14 @@ func (s *ChatPipelineService) getLLMModelConfig(ctx context.Context, chat *entit
 		return cfg, modelName, factoryName, baseURL, nil
 	}
 
-	// Branches 1/2: explicit LLM. Resolve the enrolled type first — IMAGE2TEXT
-	// when the LLM is registered as vision-capable, CHAT otherwise — and let the
-	// same resolution report the model's tool capability.
+	// Branches 1/2: explicit LLM. Resolve it as a Chat model first so an
+	// image2text-only enrollment is rejected. The enrolled type is resolved
+	// separately below only to decide whether image attachments are allowed.
 	//
 	// This mirrors Python, which resolves chat_mdl once in get_models() and then
 	// reads chat_mdl.is_tools off it (dialog_service.py rag_agent): one lookup, and
 	// the model that runs is by construction the model that was judged.
-	modelType := s.ModelProviderSvc.modelSolver().ResolveChatModelType(ctx, chat.TenantID, chat.LLMID)
-	target, err := s.ModelProviderSvc.modelSolver().ResolveModelConfig(ctx, chat.TenantID, modelType, chat.LLMID)
+	target, err := s.ModelProviderSvc.modelSolver().ResolveModelConfig(ctx, chat.TenantID, entity.ModelTypeChat, chat.LLMID)
 	if err != nil {
 		return nil, "", "", "", err
 	}
@@ -2184,7 +2197,7 @@ func (s *ChatPipelineService) getLLMModelConfig(ctx context.Context, chat *entit
 	if err != nil {
 		return nil, "", "", "", err
 	}
-	cfg["model_type"] = chatModelTypeName(modelType)
+	cfg["model_type"] = s.resolveChatModelType(ctx, chat.TenantID, chat.LLMID)
 	cfg["is_tools"] = target.SupportsTools
 	return cfg, modelName, factoryName, baseURL, nil
 }
@@ -2285,7 +2298,7 @@ func (s *ChatPipelineService) getModels(ctx context.Context, chat *entity.Chat) 
 	*modelModule.EmbeddingModel,
 	*modelModule.RerankModel,
 	*modelModule.ChatModel,
-	*modelModule.ChatModel, // TTS model
+	*modelModule.TTSModel, // TTS model
 	error,
 ) {
 	kbDAO := dao.NewKnowledgebaseDAO()
@@ -2331,7 +2344,13 @@ func (s *ChatPipelineService) getModels(ctx context.Context, chat *entity.Chat) 
 	}
 
 	// Chat model.
-	target, err := s.ModelProviderSvc.ResolveChatModelTarget(ctx, chat.TenantID, chat.LLMID)
+	var target *ModelTarget
+	var err error
+	if strings.TrimSpace(chat.LLMID) == "" {
+		target, err = s.ModelProviderSvc.modelSolver().ResolveDefaultModelConfig(ctx, chat.TenantID, entity.ModelTypeChat)
+	} else {
+		target, err = s.ModelProviderSvc.modelSolver().ResolveModelConfig(ctx, chat.TenantID, entity.ModelTypeChat, chat.LLMID)
+	}
 	var chatModel *modelModule.ChatModel
 	if err == nil {
 		chatModel = modelModule.NewChatModel(target.Driver, &target.ModelName, target.APIConfig)
@@ -2349,12 +2368,12 @@ func (s *ChatPipelineService) getModels(ctx context.Context, chat *entity.Chat) 
 	}
 
 	// TTS model.
-	var ttsModel *modelModule.ChatModel
+	var ttsModel *modelModule.TTSModel
 	if chat.PromptConfig != nil {
 		if useTTS, _ := chat.PromptConfig["tts"].(bool); useTTS {
 			target, err := s.ModelProviderSvc.modelSolver().ResolveDefaultModelConfig(ctx, chat.TenantID, entity.ModelTypeTTS)
 			if err == nil {
-				ttsModel = modelModule.NewChatModel(target.Driver, &target.ModelName, target.APIConfig)
+				ttsModel = modelModule.NewTTSModel(target.Driver, &target.ModelName, target.APIConfig)
 			}
 		}
 	}
@@ -2577,7 +2596,7 @@ func cleanTTSText(text string) string {
 
 // synthesizeTTS calls the TTS model to convert text to audio.
 // Mirrors dialog_service.py:1426-1432.
-func (s *ChatPipelineService) synthesizeTTS(ctx context.Context, ttsModel *modelModule.ChatModel, text string) interface{} {
+func (s *ChatPipelineService) synthesizeTTS(ctx context.Context, ttsModel *modelModule.TTSModel, text string) interface{} {
 	if ttsModel == nil || text == "" {
 		return nil
 	}
@@ -2585,9 +2604,7 @@ func (s *ChatPipelineService) synthesizeTTS(ctx context.Context, ttsModel *model
 	if text == "" {
 		return nil
 	}
-	ttsResp, err := ttsModel.ModelDriver.AudioSpeech(
-		ctx, ttsModel.ModelName, &text, ttsModel.APIConfig, &modelModule.TTSConfig{Format: "mp3"}, nil,
-	)
+	ttsResp, err := ttsModel.Speech(ctx, &text, &modelModule.TTSConfig{Format: "mp3"}, nil)
 	if err != nil {
 		common.Warn("TTS synthesis failed", zap.Error(err))
 		return nil
@@ -2905,7 +2922,13 @@ func (s *ChatPipelineService) buildChatDriver(ctx context.Context, chat *entity.
 	if chatModel != nil {
 		return chatModel
 	}
-	target, err := s.ModelProviderSvc.ResolveChatModelTarget(ctx, chat.TenantID, chat.LLMID)
+	var target *ModelTarget
+	var err error
+	if strings.TrimSpace(chat.LLMID) == "" {
+		target, err = s.ModelProviderSvc.modelSolver().ResolveDefaultModelConfig(ctx, chat.TenantID, entity.ModelTypeChat)
+	} else {
+		target, err = s.ModelProviderSvc.modelSolver().ResolveModelConfig(ctx, chat.TenantID, entity.ModelTypeChat, chat.LLMID)
+	}
 	if err != nil {
 		return nil
 	}
@@ -3063,7 +3086,7 @@ func (e *embeddingModelEmbedder) Encode(ctx context.Context, texts []string) ([]
 	config := &modelModule.EmbeddingConfig{Dimension: 0}
 	// Embed inside the model's window: the caller supplies arbitrary text and the
 	// provider rejects an over-window input with 400/20015 instead of truncating it.
-	embeds, err := e.embModel.EmbedWithinLimit(ctx, modelModule.EmbedRequest{Texts: texts}, config, nil)
+	embeds, err := e.embModel.Embed(ctx, modelModule.EmbedRequest{Texts: texts}, config, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -3092,7 +3115,7 @@ func (s *ChatPipelineService) decorateAnswer(
 	embModel *modelModule.EmbeddingModel,
 	vectorSimilarityWeight float64,
 	quote bool,
-	ttsModel *modelModule.ChatModel,
+	ttsModel *modelModule.TTSModel,
 	langfuseTraceID string,
 	llmModelConfig map[string]interface{},
 	tenantID string,
@@ -3220,11 +3243,14 @@ func (s *ChatPipelineService) decorateAnswer(
 		}
 	}
 
-	// Include sources only when citations are enabled and at least one citation
-	// actually resolves to a chunk, stripping chunk vectors. Retrieved evidence
-	// without a citation must not be exposed as a document reference.
-	if hasKnowledges && quote && len(citationIdx) > 0 {
-		refs = make(map[string]interface{})
+	// Reference assembly. `chunks` is the evidence the answer was grounded on,
+	// so it ships whenever knowledge was retrieved and independent of the cite
+	// setting; `doc_aggs` is the list of source cards the UI opens from a
+	// citation marker, so it ships only while citations are enabled — with no
+	// marker to open them from, the cards would be dead weight. Chunk vectors
+	// never leave this function.
+	if hasKnowledges {
+		refs = make(map[string]interface{}, len(kbinfos))
 		for k, v := range kbinfos {
 			refs[k] = v
 		}
@@ -3242,8 +3268,9 @@ func (s *ChatPipelineService) decorateAnswer(
 			}
 			refs["chunks"] = chunksFormat(newChunks)
 		}
-	} else if !quote {
-		refs = map[string]interface{}{}
+		if !quote {
+			delete(refs, "doc_aggs")
+		}
 	}
 
 	// Check for invalid API key errors (outside knowledges guard).
@@ -3320,6 +3347,19 @@ func (s *ChatPipelineService) decorateAnswer(
 	}
 }
 
+// chunksOnlyReference is the reference of an answer whose citations were
+// disabled: the retrieved evidence, in the client-facing shape, without
+// doc_aggs. The evidence still records what the answer was grounded on; only
+// the source cards go, since there is no citation marker left in the answer to
+// open them from.
+func chunksOnlyReference(kbinfos map[string]interface{}) map[string]interface{} {
+	refs := map[string]interface{}{}
+	if chunksRaw, ok := kbinfos["chunks"].([]map[string]interface{}); ok {
+		refs["chunks"] = chunksFormat(referenceChunks(nil, chunksRaw))
+	}
+	return refs
+}
+
 // decorateHarnessAnswer formats the reasoning chat's final answer. The harness
 // 'rag' tool already composed the answer WITH its own [ID:N] citations, so —
 // unlike decorateAnswer for the native async_chat path — we never run
@@ -3362,7 +3402,7 @@ func (s *ChatPipelineService) decorateHarnessAnswer(answer string, kbinfos map[s
 	if !quote {
 		return AsyncChatResult{
 			Answer:    stripCitations(think + ans),
-			Reference: map[string]interface{}{},
+			Reference: chunksOnlyReference(kbinfos),
 			CreatedAt: float64(time.Now().Unix()),
 		}
 	}
@@ -3448,24 +3488,18 @@ func (s *ChatPipelineService) decorateHarnessAnswer(answer string, kbinfos map[s
 		}
 	}
 
-	// Build a reference only when at least one citation resolves to a document.
-	// The harness may have collected evidence without the final answer citing it;
-	// that evidence must remain internal.
-	var refs map[string]interface{}
-	if len(citedDocIDs) > 0 {
-		ref := make(map[string]interface{}, len(kbinfos))
-		for k, v := range kbinfos {
-			ref[k] = v
-		}
-		// The rendered evidence list comes first, in the order the model saw it,
-		// so a marker's number is that entry's index; the remaining pool chunks
-		// follow so no retrieved passage is lost. chunksFormat builds the
-		// client-facing shape (content, document_name, dataset_id, ...) in NEW
-		// maps, so the engine keys and the per-chunk vector never reach the
-		// reference and the shared chunks stay intact.
-		ref["chunks"] = chunksFormat(referenceChunks(citeIdx, chunksRaw))
-		refs = ref
+	// The rendered evidence list comes first, in the order the model saw it, so a
+	// marker's number is that entry's index; the remaining pool chunks follow so
+	// no retrieved passage is lost. chunksFormat builds the client-facing shape
+	// (content, document_name, dataset_id, ...) in NEW maps, so the engine keys
+	// and the per-chunk vector never reach the reference and the shared chunks
+	// stay intact. The evidence ships even when the final answer cited none of
+	// it; doc_aggs, absent here, is what stays gated on `quote`.
+	refs := make(map[string]interface{}, len(kbinfos))
+	for k, v := range kbinfos {
+		refs[k] = v
 	}
+	refs["chunks"] = chunksFormat(referenceChunks(citeIdx, chunksRaw))
 
 	return AsyncChatResult{
 		Answer:    think + ans,
